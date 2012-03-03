@@ -8,7 +8,8 @@ from queryset import OperationError
 from connection import get_db, DEFAULT_CONNECTION_NAME
 
 __all__ = ['Document', 'EmbeddedDocument', 'DynamicDocument',
-           'DynamicEmbeddedDocument', 'OperationError', 'InvalidCollectionError']
+           'DynamicEmbeddedDocument', 'OperationError', 
+           'InvalidCollectionError', 'TreeDocument']
 
 
 class InvalidCollectionError(Exception):
@@ -339,6 +340,50 @@ class Document(BaseDocument):
         db = cls._get_db()
         db.drop_collection(cls._get_collection_name())
         QuerySet._reset_already_indexed(cls)
+
+
+class TreeDocument(Document):
+    """A Tree Document makes it easier to work with collections that need to
+    store hierarchial information
+    """
+    __metaclass__ = TopLevelDocumentMetaclass
+
+    from mongoengine.fields import ListField, ReferenceField
+    ancestors = ListField(ReferenceField('self'))
+
+    @property
+    def children(self):
+        """
+        Returns the list of Document instances whose parent is the current
+        document
+
+        .. note::
+            The returned value from this property is a :class:`QuerySet` as it
+            may not be efficient to return a list of all descendantds depending
+            on the size of your collection.
+
+        """
+        return self.__class__.objects(parent=self)
+
+    @property
+    def descendants(self):
+        """
+        Returns the list of Document instances whose ancestor is the current
+        document.
+
+        .. note::
+            The returned value from this property is a :class:`QuerySet` as it
+            may not be efficient to return a list of all descendantds depending
+            on the size of your collection.
+        """
+        return self.__class__.objects(ancestors=self)
+
+    @property
+    def depth(self):
+        """
+        Returns the depth of the record in the hierarchy
+        """
+        return len(self.ancestors)
 
 
 class DynamicDocument(Document):

@@ -775,6 +775,68 @@ class DocumentTest(unittest.TestCase):
         info = RecursiveDocument.objects._collection.index_information()
         self.assertEqual(info.keys(), ['_id_', '_types_1'])
 
+    def test_tree_document(self):
+
+        class TreeObject(TreeDocument):
+            name = StringField()
+            parent = ParentField()
+
+        a = TreeObject(name="a")
+        a.save()
+
+        aa = TreeObject(name="aa", parent=a)
+        aa.save()
+        ab = TreeObject(name="ab", parent=a)
+        ab.save()
+
+        a.reload()
+        self.assertTrue(aa in a.children)
+        self.assertTrue(ab in a.children)
+
+        # Try setting a record's parent as itself
+        xx = TreeObject(name="xx")
+        xx.save()
+        def set_parent():
+            xx.parent = xx
+        self.assertRaises(ValidationError, set_parent)
+
+    def test_tree_document_hierarchy(self):
+
+        class TreeObject(TreeDocument):
+            name = StringField()
+            parent = ParentField()
+
+        a = TreeObject(name="a")
+        a.save()
+        self.assertEqual(a.depth, 0)
+
+        aa = TreeObject(name="aa", parent=a)
+        aa.save()
+        aa.reload()
+        self.assertTrue(a.to_dbref() in (n.to_dbref() for n in aa.ancestors))
+        self.assertEqual(aa.depth, 1)
+
+        ab = TreeObject(name="ab", parent=a)
+        ab.save()
+
+        aaa = TreeObject(name="aaa", parent=aa)
+        aaa.save()
+        self.assertTrue(a.to_dbref() in (n.to_dbref() for n in aaa.ancestors))
+        self.assertTrue(aa.to_dbref() in (n.to_dbref() for n in aaa.ancestors))
+        self.assertEqual(aaa.depth, 2)
+
+        aab = TreeObject(name="aab", parent=aa)
+        aab.save()
+        aba = TreeObject(name="aba", parent=ab)
+        aba.save()
+        abb = TreeObject(name="abb", parent=ab)
+        abb.save()
+        self.assertTrue(a.to_dbref() in (n.to_dbref() for n in abb.ancestors))
+        self.assertTrue(ab.to_dbref() in (n.to_dbref() for n in abb.ancestors))
+
+        self.assertEqual(a.descendants.count(), 2 + (2 * 2))
+        self.assertTrue(abb in a.descendants.all())
+
     def test_geo_indexes_recursion(self):
 
         class User(Document):
@@ -2779,6 +2841,7 @@ class DocumentTest(unittest.TestCase):
                                                        this.name == '2';}"""
                                         }
                                     ) ]), "1,2")
+
 
 if __name__ == '__main__':
     unittest.main()

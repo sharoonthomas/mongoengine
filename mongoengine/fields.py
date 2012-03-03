@@ -30,7 +30,7 @@ except ImportError:
 __all__ = ['StringField', 'IntField', 'FloatField', 'BooleanField',
            'DateTimeField', 'EmbeddedDocumentField', 'ListField', 'DictField',
            'ObjectIdField', 'ReferenceField', 'ValidationError', 'MapField',
-           'DecimalField', 'ComplexDateTimeField', 'URLField',
+           'DecimalField', 'ComplexDateTimeField', 'URLField', 'ParentField',
            'GenericReferenceField', 'FileField', 'BinaryField',
            'SortedListField', 'EmailField', 'GeoPointField', 'ImageField',
            'SequenceField', 'UUIDField', 'GenericEmbeddedDocumentField']
@@ -1233,3 +1233,28 @@ class UUIDField(BaseField):
                 value = uuid.UUID(value)
             except Exception, exc:
                 self.error('Could not convert to UUID: %s' % exc)
+
+
+class ParentField(ReferenceField):
+    """An implementation of the ReferenceField to be used with `TreeDocument`
+    to store hierarchial data. The field behaviour is identical to that of a
+    :class:`ReferenceField` that has a recursive reference.
+
+    .. versionadded:: 0.6
+    """
+    def __init__(self, **kwargs):
+        super(ParentField, self).__init__(
+            RECURSIVE_REFERENCE_CONSTANT, **kwargs
+        )
+
+    def __set__(self, instance, value):
+        if instance.pk:
+            # If the document has been saved ensure that it doesnt refer 
+            # itself as a parent
+            if instance.pk == value.id:
+                self.error("Parent of a document cannot be itself")
+        super(ParentField, self).__set__(instance, value)
+
+        # Now set the ancestors
+        parent = instance.__class__.objects.with_id(value.id)
+        instance.ancestors = parent.ancestors + [parent.to_dbref()]
